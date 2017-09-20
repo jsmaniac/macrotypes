@@ -880,6 +880,9 @@
    [⊢ e_fn ≫ e_fn- ⇒ (~?∀ Xs (~ext-stlc:→ . tyX_args))]
    ;; solve for type variables Xs
    #:with [[e_arg- ...] Xs* cs] (solve #'Xs #'tyX_args this-syntax)
+   #:do {(newline)
+         (displayln "Solved argument types")
+         (map displayln (syntax->datum #'[[e_arg- ...] Xs* cs]))}
    ;; instantiate polymorphic function type
    #:with [τ_in ... τ_out] (inst-types/cs #'Xs* #'cs #'tyX_args)
    #:with (unsolved-X ...) (find-free-Xs #'Xs* #'τ_out)
@@ -888,8 +891,20 @@
                  (num-args-fail-msg #'e_fn #'[τ_in ...] #'[e_arg ...])
    ;; compute argument types
    #:with (τ_arg ...) (stx-map typeof #'(e_arg- ...))
+   #:do {(newline)
+         (displayln "Computed argument types")
+         (for ([a (in-syntax #'(τ_arg ...))]
+               [in (in-syntax #'(τ_in ...))]
+               [e (in-syntax #'(e_arg ...))])
+           (display 'a=) (displayln (type->str a))
+           (display 'i=) (displayln (type->str in))
+           (display 'e=) (displayln (syntax->datum e))
+           (display 'ck) (displayln (check? a in))
+           (newline))
+         (displayln "----")}
    ;; typecheck args
    [τ_arg τ⊑ τ_in #:for e_arg] ...
+   #:do {(displayln "AAA")}
    #:with τ_out* (if (stx-null? #'(unsolved-X ...))
                      #'τ_out
                      (syntax-parse #'τ_out
@@ -903,6 +918,7 @@
                              (mk-app-poly-infer-error this-syntax #'(τ_in ...) #'(τ_arg ...) #'e_fn)
                              this-syntax)))
                         #'(∀ (unsolved-X ... Y ...) τ_out)]))
+   #:do {(displayln "BBB")}
    --------
    [⊢ (#%app- e_fn- e_arg- ...) ⇒ τ_out*]])
 

@@ -28,7 +28,16 @@
     (member X Xs* free-identifier=?))
   (add-constraints/var? Xs* X? substs new-cs orig-cs))
 
-(define (add-constraints/var? Xs* var? substs new-cs [orig-cs new-cs])
+;; Variance Type Type -> Boolean
+(define (typecheck?/variance variance a-expected b-actual)
+  (cond
+    [(equal? variance covariant) (typecheck? b-actual a-expected)]
+    [(equal? variance contravariant) (typecheck? b-actual a-expected)]
+    ;; invariant and irrelevant
+    [else (and (typecheck? a-expected b-actual)
+               (typecheck? b-actual a-expected))]))
+
+(define (add-constraints/var? Xs* var? substs new-cs [orig-cs new-cs] [variance covariant]) ;; TODO: variance ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
   (define Xs (stx->list Xs*))
   (define Ys (stx-map stx-car substs))
   (define-syntax-class var
@@ -59,7 +68,8 @@
          Xs
          var?
          ;; Add the mapping #'a -> #'b to the substitution,
-         (add-substitution-entry entry substs)
+         (begin (displayln (list (type->str (car entry)) '-> (type->str (cadr entry)) 'with-substs substs))
+                (add-substitution-entry entry substs))
          ;; and substitute that in each of the constraints.
          (cs-substitute-entry entry #'rst)
          orig-cs)])]
@@ -95,7 +105,7 @@
        [else
         (syntax-parse #'[a b]
           [_
-           #:when (typecheck? #'a #'b)
+           #:when (typecheck?/variance variance #'a #'b)
            (add-constraints/var? Xs
                                  var?
                                  substs
@@ -110,6 +120,7 @@
                                  #'((τ1 τ2) ... . rst)
                                  orig-cs)]
           [else
+           (displayln 2)
            (type-error #:src (get-orig #'b)
                        #:msg (format "couldn't unify ~~a and ~~a\n  expected: ~a\n  given: ~a"
                                      (string-join (map type->str (stx-map stx-car orig-cs)) ", ")
