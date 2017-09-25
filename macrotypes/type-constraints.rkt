@@ -24,78 +24,54 @@
 ;; (Listof Id) (Listof (List Id Type)) (Stx-Listof (Stx-List Stx Stx)) -> (Listof (List Id Type))
 ;; Adds a new set of constaints to a substituion, using the type
 ;; unification algorithm for local type inference.
-(define (add-constraints Xs substs new-cs [orig-cs new-cs]
-                         #:variance [csvariance invariant])
+(define (add-constraints Xs substs new-cs [orig-cs new-cs])
   (define Xs* (stx->list Xs))
   (define (X? X)
     (member X Xs* free-identifier=?))
-  (add-constraints/var? X? substs new-cs orig-cs
-                        #:variance csvariance))
+  (add-constraints/var? Xs* X? substs new-cs orig-cs))
 
-;; Variance Type Type -> Boolean
-(define (typecheck?/variance variance a-expected b-actual)
-  (cond
-    [(variance-covariant? variance) (typecheck? b-actual a-expected)]
-    [(variance-contravariant? variance) (typecheck? b-actual a-expected)]
-    ;; invariant and irrelevant
-    ;; TODO: use a parameter to indicate whether we're making a co/contravariant typecheck?, or whether it's an invariant typecheck? (to avoid an exponential cost by branching at each step)
-    [else (and (typecheck? a-expected b-actual)
-               (typecheck? b-actual a-expected))]))
-
-;; (Listof Id) -> (free-id-table/c identifier? variance? #:immutable #t)
-(define (default-variances Ys)
-  (make-immutable-free-id-table
-   (for/list ([X (in-list Ys)])
-     (cons X covariant)))); invariant ;;;;;;;;;;;;; TODO: should be invariant, putting covariant for now for quick tests.
-
-
-
-
-
-
-
-
-
-(define (add-constraints/var? var? substs new-cs [orig-cs new-cs]
-                              #:variance [csvariance invariant]
-                              ;#:variances [variances* #f]
-                              )
-  (define (r #:substs [substs substs] #:new-cs [new-cs new-cs])
-    (add-constraints/var? var? substs new-cs orig-cs #:variance csvariance))
+(define (add-constraints/var? Xs* var? substs new-cs [orig-cs new-cs])
+  (define Xs (stx->list Xs*))
   (define Ys (stx-map stx-car substs))
   (define-syntax-class var
     [pattern x:id #:when (var? #'x)])
-  #;(begin 
-      (displayln "~~~~")
-      (if (stx-null? new-cs)
-          (displayln '())
-          (begin (display 'a) (displayln (type->str (stx-car (stx-car new-cs))))
-                 (display 'b) (displayln (type->str (stx-car (stx-cdr (stx-car new-cs))))))))
   (syntax-parse new-cs
     [() substs]
-    [([a-expected:var b-actual] . rst)
+    [([a:var b] . rst)
      (cond
-       [(member #'a-expected Ys free-identifier=?)
+       [(member #'a Ys free-identifier=?)
         ;; There are two cases.
         ;; Either #'a already maps to #'b or an equivalent type,
         ;; or #'a already maps to a type that conflicts with #'b.
         ;; In either case, whatever #'a maps to must be equivalent
         ;; to #'b, so add that to the constraints.
-        (r #:new-cs (cons (list (lookup #'a-expected substs) #'b-actual)
-                          #'rst))]
-       [(and (identifier? #'b-actual) (var? #'b-actual) (free-identifier=? #'a-expected #'b-actual))
+        (add-constraints/var?
+         Xs
+         var?
+         substs
+         (cons (list (lookup #'a substs) #'b)
+               #'rst)
+         orig-cs)]
+       [(and (identifier? #'b) (var? #'b) (free-identifier=? #'a #'b))
         ;; #'a and #'b are equal, drop this constraint
-        (r #:new-cs #'rst)]
+        (add-constraints/var? Xs var? substs #'rst orig-cs)]
        [else
-        (define entry (occurs-check (list #'a-expected #'b-actual) orig-cs))
-        (r ;; Add the mapping #'a -> #'b to the substitution,
-         #:substs (begin #;(displayln (list (type->str (car entry)) '-> (type->str (cadr entry)) 'with-substs substs))
-                         (add-substitution-entry entry substs #:new-cs new-cs #:orig-cs orig-cs))
+        (define entry (occurs-check (list #'a #'b) orig-cs))
+        (add-constraints/var?
+         Xs
+         var?
+         ;; Add the mapping #'a -> #'b to the substitution,
+         (add-substitution-entry entry substs)
          ;; and substitute that in each of the constraints.
-         #:new-cs (cs-substitute-entry entry #'rst))])]
-    [([a-expected b-actual:var] . rst)
-     (r #:new-cs #'([b-actual a-expected] . rst))]
-    [([a-expected b-actual] . rst)
+         (cs-substitute-entry entry #'rst)
+         orig-cs)])]
+    [([a b:var] . rst)
+     (add-constraints/var? Xs
+                           var?
+                           substs
+                           #'([b a] . rst)
+                           orig-cs)]
+    [([a b] . rst)
      ;; If #'a and #'b are base types, check that they're equal.
      ;; Identifers not within Xs count as base types.
      ;; If #'a and #'b are constructed types, check that the
@@ -103,44 +79,54 @@
      ;; recur.
      ;; Otherwise, raise an error.
      (cond
-       [(identifier? #'a-expected)
+       [(identifier? #'a)
         ;; #'a is an identifier, but not a var, so it is considered
         ;; a base type. We also know #'b is not a var, so #'b has
         ;; to be the same "identifier base type" as #'a.
-        (unless (and (identifier? #'b-actual) (free-identifier=? #'a-expected #'b-actual))
-          #;(displayln 1)
-          (type-error #:src (get-orig #'b-actual)
+        (unless (and (identifier? #'b) (free-identifier=? #'a #'b))
+          (type-error #:src (get-orig #'b)
                       #:msg (format "couldn't unify ~~a and ~~a\n  expected: ~a\n  given: ~a"
                                     (string-join (map type->str (stx-map stx-car orig-cs)) ", ")
                                     (string-join (map type->str (stx-map stx-cadr orig-cs)) ", "))
-                      #'a-expected #'b-actual))
-        (r #:new-cs #'rst)]
+                      #'a #'b))
+        (add-constraints/var? Xs
+                              var?
+                              substs
+                              #'rst
+                              orig-cs)]
        [else
-        (syntax-parse #'[a-expected b-actual]
+        (syntax-parse #'[a b]
           [_
-           #:when (typecheck?/variance csvariance #'a-expected #'b-actual);; variances ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-           (r #:new-cs #'rst)]
+           #:when (typecheck? #'a #'b)
+           (add-constraints/var? Xs
+                                 var?
+                                 substs
+                                 #'rst
+                                 orig-cs)]
           [((~Any tycons1 τ1 ...) (~Any tycons2 τ2 ...))
-           ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; TODO: flip variance as needed depending on the variances for tycons1 / tycons2.
            #:when (typecheck? #'tycons1 #'tycons2)
            #:when (stx-length=? #'[τ1 ...] #'[τ2 ...])
-           (r #:new-cs #'((τ1 τ2) ... . rst))]
+           (add-constraints/var? Xs
+                                 var?
+                                 substs
+                                 #'((τ1 τ2) ... . rst)
+                                 orig-cs)]
           [else
-           #;(displayln 2)
-           (type-error #:src (get-orig #'b-actual)
+           (type-error #:src (get-orig #'b)
                        #:msg (format "couldn't unify ~~a and ~~a\n  expected: ~a\n  given: ~a"
                                      (string-join (map type->str (stx-map stx-car orig-cs)) ", ")
                                      (string-join (map type->str (stx-map stx-cadr orig-cs)) ", "))
-                       #'a-expected #'b-actual)])])]))
+                       #'a #'b)])])]))
 
-
-
-
-
-
-
-
-
+;; Variance Type Type -> Boolean
+(define (typecheck?/variance variance a b)
+  (cond
+    [(variance-covariant? variance) (typecheck? b a)]
+    [(variance-contravariant? variance) (typecheck? b a)]
+    ;; invariant and irrelevant
+    ;; TODO: use a parameter to indicate whether we're making a co/contravariant typecheck?, or whether it's an invariant typecheck? (to avoid an exponential cost by branching at each step)
+    [else (and (typecheck? a b)
+               (typecheck? b a))]))
 
 ;; (-> Any Boolean : (∩ X Id))
 ;; (FreeIdTable (∩ X Id) Variance)
@@ -196,21 +182,12 @@
     [(_ . rest)
      (do-error)]))
 
-
-
-
-
-
-
-
-
-
 (define (datum=? x y)
   (equal? (syntax->datum x) (syntax->datum y)))
 
 ;; add-substitution-entry : (List Id Type) (Listof (List Id Type)) -> (Listof (List Id Type))
 ;; Adds the mapping a -> b to the substitution and substitutes for it in the other entries
-(define (add-substitution-entry entry substs #:new-cs new-cs #:orig-cs orig-cs)
+(define (add-substitution-entry entry substs)
   (match-define (list a b) entry)
   (cons entry
         (for/list ([subst (in-list substs)])
@@ -230,7 +207,6 @@
   (match-define (list a b) entry)
   (cond [(stx-contains-id? b a)
          (type-error #:src (get-orig b)
-                     ;; TODO: should escape the possible ~a within the type->str result ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
                      #:msg (format (string-append
                                     "couldn't unify ~~a and ~~a because one contains the other\n"
                                     "  expected: ~a\n"
