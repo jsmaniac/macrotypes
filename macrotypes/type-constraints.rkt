@@ -140,22 +140,27 @@
         (free-id-table/c identifier? variance? #:immutable #t)
         (flat-named-contract
          "(stx-listof (stx-list/c type? type? variance?))"
-         (stx->list->c (listof (stx->list->c (list/c type? type? (stx->datum->c variance?))))))}
+         (stx->list->c (listof (stx->list->c (list/c type? type? (stx->datum->c variance?))))))
+        (flat-named-contract
+         "(stx-listof (stx-list/c syntax? syntax?))"
+         (stx->list->c (listof (stx->list->c (list/c syntax? syntax?)))))}
        {(free-id-table/c identifier? type? #:immutable #t)}
        (free-id-table/c identifier? type? #:immutable #t))])
 (define (add-constraints/variance Xs X→variance ab+variance*
+                                  orig-cs
                                   [old-solution (make-immutable-free-id-table)])
   (define Xset (immutable-free-id-set (stx->list Xs)))
   (define X? (curry free-id-set-member? Xset))
-  (add-constraints/variance/var? X? X→variance ab+variance* old-solution))
+  (add-constraints/variance/var? X? X→variance ab+variance* old-solution orig-cs))
 
 ;; (-> Any Boolean : (∩ X Id))
 ;; (ImmutableFreeIdTable (∩ X Id) Variance)
 ;; (Stx-Listof (Stx-List Type Type Variance)) ;; caller-τ callee-τ variance
 ;; (ImmutableFreeIdTable (∩ X Id) Type)
+;; (Stx-Listof (Stx-List Stx Stx))
 ;; ->
 ;; (ImmutableFreeIdTable (∩ X Id) Type)
-(define (add-constraints/variance/var? X? X→variance ab+variance* old-solution)
+(define (add-constraints/variance/var? X? X→variance ab+variance* old-solution orig-cs)
   (define-syntax-class X
     (pattern v:id
              #:when (X? #'v)
@@ -164,10 +169,12 @@
   (define (do-error)
     (define/with-syntax [(a b _) . _] ab+variance*)
     (type-error #:src (get-orig #'b)
-                #:msg "couldn't unify ~~a and ~~a"
+                #:msg (format "couldn't unify ~~a and ~~a\n  expected: ~a\n  given: ~a"
+                              (string-join (map type->str (stx-map stx-car orig-cs)) ", ")
+                              (string-join (map type->str (stx-map stx-cadr orig-cs)) ", "))
                 #'a #'b))
   (define (continue new-ab* new-solution)
-    (add-constraints/variance/var? X? X→variance new-ab* new-solution))
+    (add-constraints/variance/var? X? X→variance new-ab* new-solution orig-cs))
   (syntax-parse ab+variance*
     [() old-solution]
     [((caller-τ callee-τ:X a/b-variance) . rest)

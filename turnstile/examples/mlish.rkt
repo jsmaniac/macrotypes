@@ -117,7 +117,9 @@
          (if (and (syntax-e #'expected-ty) (stx-null? #'Vs))
              (add-constraints/variance Xs
                                        Xs-variances
-                                       #`([expected-ty τ_outX #,contravariant]))
+                                       #`([expected-ty τ_outX #,contravariant])
+                                       ;; For error reporting only:
+                                       (list (list #'expected-ty #'τ_outX)))
              (make-immutable-free-id-table)))
        (syntax-parse stx
          [(_ e_fn . args)
@@ -135,6 +137,14 @@
                (add-constraints/variance Xs
                                          Xs-variances
                                          #`([ty_a #,ty_in #,covariant])
+                                         ;; For error reporting only:
+                                         (list (list (inst-type/cs/orig
+                                                      Xs (free-id-table-map cs list) ty_in
+                                                      (λ (id1 id2)
+                                                        (equal? (syntax->datum id1)
+                                                                (syntax->datum id2))))
+                                                     #'ty_a))
+                                         ;; current cs
                                          cs))))
           (define solution-as-list (free-id-table-map cs list))
           (list (reverse as-)
