@@ -19,7 +19,6 @@
          syntax/id-set
          (for-meta -1 "typecheck.rkt")
          "stx-utils.rkt"
-         anaphoric
          )
 
 ;; add-constraints :
@@ -173,11 +172,12 @@
     [() old-solution]
     [((caller-τ callee-τ:X a/b-variance) . rest)
      ;; If a substitution was already inferred for X, check if #'a is compatible
-     (awhen (free-id-table-ref old-solution #'callee-τ #f)
-       (define v (variance-join (attribute callee-τ.variance)
-                                (syntax->datum #'a/b-variance)))
-       (unless (typecheck?/variance v it #'caller-τ)
-         (do-error)))
+     (let ([existing (free-id-table-ref old-solution #'callee-τ #f)])
+       (when existing
+         (define v (variance-join (attribute callee-τ.variance)
+                                  (syntax->datum #'a/b-variance)))
+         (unless (typecheck?/variance v existing #'caller-τ)
+           (do-error))))
      (continue #'rest
                (free-id-table-set old-solution #'callee-τ #'caller-τ))]
     [(((~Any caller-tycons caller-τᵢ ...)
