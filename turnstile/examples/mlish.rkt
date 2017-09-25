@@ -2,7 +2,9 @@
 (require
  (postfix-in - racket/fixnum)
  (postfix-in - racket/flonum)
- (for-syntax macrotypes/type-constraints macrotypes/variance-constraints))
+ (for-syntax macrotypes/type-constraints
+             macrotypes/variance-constraints
+             syntax/id-table))
 
 (extends
  "ext-stlc.rkt" 
@@ -108,34 +110,36 @@
        #:with (~?∀ Vs expected-ty)
               (and (get-expected-type stx)
                    ((current-type-eval) (get-expected-type stx)))
+       (define Xs-variances (make-immutable-free-id-table
+                             (for/list ([X (in-syntax Xs)])
+                               (cons X (find-X-variance X tyXs)))))
        (define initial-cs
          (if (and (syntax-e #'expected-ty) (stx-null? #'Vs))
-             (add-constraints Xs '() (list (list #'expected-ty #'τ_outX))
-                              #:variance contravariant) ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; TODO
-             '()))
+             (add-constraints/variance Xs
+                                       Xs-variances
+                                       #`([expected-ty τ_outX #,contravariant]))
+             (make-immutable-free-id-table)))
        (syntax-parse stx
          [(_ e_fn . args)
           (define-values (as- cs)
-              (for/fold ([as- null] [cs initial-cs])
-                        ([a (in-stx-list #'args)]
-                         [tyXin (in-stx-list #'(τ_inX ...))])
-                (define ty_in (inst-type/cs Xs cs tyXin))
-                (define/with-syntax [a- ty_a]
-                  (infer+erase (if (empty? (find-free-Xs Xs ty_in))
-                                   (add-expected-ty a ty_in)
-                                   a)))
-                (values 
-                 (cons #'a- as-)
-                 (add-constraints Xs cs (list (list ty_in #'ty_a))
-                                  (list (list (inst-type/cs/orig
-                                               Xs cs ty_in
-                                               (λ (id1 id2)
-                                                 (equal? (syntax->datum id1)
-                                                         (syntax->datum id2))))
-                                              #'ty_a))
-                                  #:variance covariant))))
-
-         (list (reverse as-) Xs cs)])]))
+            (for/fold ([as- null] [cs initial-cs])
+                      ([a (in-stx-list #'args)]
+                       [tyXin (in-stx-list #'(τ_inX ...))])
+              (define ty_in (inst-type/cs Xs (free-id-table-map cs list) tyXin)) ;;; TODO: is this really necessary???
+              (define/with-syntax [a- ty_a]
+                (infer+erase (if (empty? (find-free-Xs Xs ty_in))
+                                 (add-expected-ty a ty_in)
+                                 a)))
+              (values 
+               (cons #'a- as-)
+               (add-constraints/variance Xs
+                                         Xs-variances
+                                         #`([ty_a #,ty_in #,covariant])
+                                         cs))))
+          (define solution-as-list (free-id-table-map cs list))
+          (list (reverse as-)
+                (map car solution-as-list)
+                solution-as-list)])]))
 
   (define (mk-app-poly-infer-error stx expected-tys given-tys e_fn)
     (format (string-append

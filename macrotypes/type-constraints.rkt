@@ -2,6 +2,7 @@
 
 (provide add-constraints
          add-constraints/var?
+         add-constraints/variance/var?
          lookup
          lookup-Xs/keep-unsolved
          inst-type
@@ -15,6 +16,7 @@
 (require syntax/parse
          syntax/stx
          syntax/id-table
+         syntax/id-set
          (for-meta -1 "typecheck.rkt")
          "stx-utils.rkt"
          anaphoric
@@ -128,13 +130,33 @@
     [else (and (typecheck? a b)
                (typecheck? b a))]))
 
+(define ((stx->list->c l-c) v) (and (stx-list? v) (l-c (stx->list v))))
+(define (to-datum v) (syntax->datum (datum->syntax #f v)))
+(define ((stx->datum->c d-c) v) (d-c (to-datum v)))
+(provide/contract
+ [add-constraints/variance
+  (->* {(flat-named-contract
+         "(stx-listof identifier?)"
+         (stx->list->c (listof identifier?)))
+        (free-id-table/c identifier? variance? #:immutable #t)
+        (flat-named-contract
+         "(stx-listof (stx-list/c type? type? variance?))"
+         (stx->list->c (listof (stx->list->c (list/c type? type? (stx->datum->c variance?))))))}
+       {(free-id-table/c identifier? type? #:immutable #t)}
+       (free-id-table/c identifier? type? #:immutable #t))])
+(define (add-constraints/variance Xs X→variance ab+variance*
+                                  [old-solution (make-immutable-free-id-table)])
+  (define Xset (immutable-free-id-set (stx->list Xs)))
+  (define X? (curry free-id-set-member? Xset))
+  (add-constraints/variance/var? X? X→variance ab+variance* old-solution))
+
 ;; (-> Any Boolean : (∩ X Id))
-;; (FreeIdTable (∩ X Id) Variance)
+;; (ImmutableFreeIdTable (∩ X Id) Variance)
 ;; (Stx-Listof (Stx-List Type Type Variance)) ;; caller-τ callee-τ variance
-;; (FreeIdTable (∩ X Id) Type)
+;; (ImmutableFreeIdTable (∩ X Id) Type)
 ;; ->
-;; (FreeIdTable (∩ X Id) Type)
-(define (add-constraints2 X? X→variance ab+variance* old-solution)
+;; (ImmutableFreeIdTable (∩ X Id) Type)
+(define (add-constraints/variance/var? X? X→variance ab+variance* old-solution)
   (define-syntax-class X
     (pattern v:id
              #:when (X? #'v)
@@ -146,12 +168,12 @@
                 #:msg "couldn't unify ~~a and ~~a"
                 #'a #'b))
   (define (continue new-ab* new-solution)
-    (add-constraints2 X? X→variance ab+variance* old-solution))
+    (add-constraints/variance/var? X? X→variance new-ab* new-solution))
   (syntax-parse ab+variance*
     [() old-solution]
     [((caller-τ callee-τ:X a/b-variance) . rest)
      ;; If a substitution was already inferred for X, check if #'a is compatible
-     (awhen (free-id-table-ref old-solution #'callee-τ)
+     (awhen (free-id-table-ref old-solution #'callee-τ #f)
        (define v (variance-join (attribute callee-τ.variance)
                                 (syntax->datum #'a/b-variance)))
        (unless (typecheck?/variance v it #'caller-τ)
@@ -168,8 +190,7 @@
      #:with (varianceᵢ ...)
      (for/list ([v (in-list (or (get-arg-variances #'caller-tycons)
                                 (get-arg-variances #'callee-tycons)))])
-       (variance-compose (syntax->datum #'a/b-variance)
-                         (syntax->datum v)))
+       (variance-compose (syntax->datum #'a/b-variance) v))
      #:when (= (stx-length #'(caller-τᵢ ...)) (stx-length #'(callee-τᵢ ...)))
      #:when (= (stx-length #'(caller-τᵢ ...)) (stx-length #'(varianceᵢ ...)))
      (continue #'((caller-τᵢ callee-τᵢ varianceᵢ) ... . rest)
@@ -258,6 +279,14 @@
 (define (inst-type/cs/orig Xs cs ty [var=? free-identifier=?])
   (define tys-solved (lookup-Xs/keep-unsolved Xs cs))
   (inst-type/orig tys-solved Xs ty var=?))
+;; inst-type/cs/orig/variance
+;; (ImmutableFreeIdTable X Type) Type -> Type
+(define (inst-type/cs/orig/variance solution ty [var=? free-identifier=?])
+  (define solution-as-list (free-id-table-map solution cons))
+  (inst-type/orig (map cdr solution-as-list)
+                  (map car solution-as-list)
+                  ty
+                  var=?))
 ;; inst-types/cs/orig :
 ;; (Stx-Listof Id) Constraints (Stx-Listof Type-Stx) (Id Id -> Bool) -> (Listof Type-Stx)
 ;; the plural version of inst-type/cs/orig
