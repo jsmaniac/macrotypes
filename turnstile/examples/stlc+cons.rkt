@@ -14,7 +14,9 @@
          nil isnil cons list head tail
          reverse length list-ref member)
 
-(define-type-constructor List)
+(define-type-constructor List
+  #:arity >= 0
+  #:arg-variances (λ (stx) (make-list (sub1 (stx-length stx)) covariant)))
 
 (define-typed-syntax nil
   [(_ ~! τi:type-ann) ≫

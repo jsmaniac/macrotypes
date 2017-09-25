@@ -23,6 +23,8 @@
 (require (rename-in (only-in "stlc+reco+var.rkt" tup proj ×)
            [tup rec] [proj get] [× ××]))
 (provide rec get ××)
+(provide (for-syntax covariant-X?
+                     contravariant-X?))
 ;; for pattern matching
 (require (prefix-in stlc+cons: (only-in "stlc+cons.rkt" list)))
 (require (prefix-in stlc+tup: (only-in "stlc+tup.rkt" tup)))
@@ -108,7 +110,8 @@
                    ((current-type-eval) (get-expected-type stx)))
        (define initial-cs
          (if (and (syntax-e #'expected-ty) (stx-null? #'Vs))
-             (add-constraints Xs '() (list (list #'expected-ty #'τ_outX)))
+             (add-constraints Xs '() (list (list #'expected-ty #'τ_outX))
+                              #:variance contravariant) ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; TODO
              '()))
        (syntax-parse stx
          [(_ e_fn . args)
@@ -129,7 +132,8 @@
                                                (λ (id1 id2)
                                                  (equal? (syntax->datum id1)
                                                          (syntax->datum id2))))
-                                              #'ty_a))))))
+                                              #'ty_a))
+                                  #:variance covariant))))
 
          (list (reverse as-) Xs cs)])]))
 
@@ -880,7 +884,7 @@
    [⊢ e_fn ≫ e_fn- ⇒ (~?∀ Xs (~ext-stlc:→ . tyX_args))]
    ;; solve for type variables Xs
    #:with [[e_arg- ...] Xs* cs] (solve #'Xs #'tyX_args this-syntax)
-   #:do {(newline)
+   #:do {} #;{(newline)
          (displayln "Solved argument types")
          (map displayln (syntax->datum #'[[e_arg- ...] Xs* cs]))}
    ;; instantiate polymorphic function type
@@ -891,7 +895,7 @@
                  (num-args-fail-msg #'e_fn #'[τ_in ...] #'[e_arg ...])
    ;; compute argument types
    #:with (τ_arg ...) (stx-map typeof #'(e_arg- ...))
-   #:do {(newline)
+   #:do {}#;{(newline)
          (displayln "Computed argument types")
          (for ([a (in-syntax #'(τ_arg ...))]
                [in (in-syntax #'(τ_in ...))]
@@ -904,7 +908,6 @@
          (displayln "----")}
    ;; typecheck args
    [τ_arg τ⊑ τ_in #:for e_arg] ...
-   #:do {(displayln "AAA")}
    #:with τ_out* (if (stx-null? #'(unsolved-X ...))
                      #'τ_out
                      (syntax-parse #'τ_out
@@ -918,7 +921,6 @@
                              (mk-app-poly-infer-error this-syntax #'(τ_in ...) #'(τ_arg ...) #'e_fn)
                              this-syntax)))
                         #'(∀ (unsolved-X ... Y ...) τ_out)]))
-   #:do {(displayln "BBB")}
    --------
    [⊢ (#%app- e_fn- e_arg- ...) ⇒ τ_out*]])
 
