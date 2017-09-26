@@ -198,6 +198,21 @@
            (do-error 33))))
      (continue #'rest
                (free-id-table-set old-solution #'callee-τ #'caller-τ))]
+    #;[((caller callee a/b-variance) . rest)
+     #:when (displayln 'caller+callee+rest)
+     #:when (begin (display (X? #'caller))(displayln #'caller))
+     #:when (begin (display (free-identifier=? (stx-car Xs) #'callee))(displayln #'callee))
+     #:when (displayln Xs)
+     #:when (displayln #'rest)
+     #:when #f
+     #f]
+    [((caller-τ callee-τ a/b-variance) . rest)
+     ;; TODO: use this as a fallback if the "invariant" above fails?
+     #:when (displayln (list #'caller-τ #'callee-τ (syntax->datum #'a/b-variance)))
+     #:when (typecheck?/variance (syntax->datum #'a/b-variance)
+                                 #'caller-τ
+                                 #'callee-τ)
+     (continue #'rest old-solution)]
     [(((~Any caller-tycons caller-τᵢ ...)
        (~Any callee-tycons callee-τᵢ ...)
        a/b-variance)
@@ -213,14 +228,6 @@
      #:when (= (stx-length #'(caller-τᵢ ...)) (stx-length #'(varianceᵢ ...)))
      (continue #'((caller-τᵢ callee-τᵢ varianceᵢ) ... . rest)
                old-solution)]
-    [((caller callee a/b-variance) . rest)
-     #:when (displayln 'caller+callee+rest)
-     #:when (begin (display (X? #'caller))(displayln #'caller))
-     #:when (begin (display (free-identifier=? (stx-car Xs) #'callee))(displayln #'callee))
-     #:when (displayln Xs)
-     #:when (displayln #'rest)
-     #:when #f
-     #f]
     [(({~and caller (~Any caller-tycons caller-τᵢ ...)}
        {~and callee (~Any callee-tycons callee-τᵢ ...)}
        a/b-variance)
@@ -232,12 +239,6 @@
      #:when (= (stx-length #'(caller-τᵢ ...)) (stx-length #'(callee-τᵢ ...)))
      (continue #`((caller-τᵢ callee-τᵢ #,invariant) ... . rest)
                old-solution)]
-    [((caller-τ callee-τ a/b-variance) . rest)
-     ;; TODO: use this as a fallback if the "invariant" above fails?
-     #:when (typecheck?/variance (syntax->datum #'a/b-variance)
-                                 #'caller-τ
-                                 #'callee-τ)
-     (continue #'rest old-solution)]
     [(_ . rest)
      (do-error 34)]))
 
