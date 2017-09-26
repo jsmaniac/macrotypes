@@ -305,12 +305,7 @@
 ;; inst-type/cs/orig :
 ;; (Stx-Listof Id) Constraints Type-Stx (Id Id -> Bool) -> Type-Stx
 ;; like inst-type/cs, but also substitutes within the orig property
-(define/contract (inst-type/cs/orig Xs cs ty [var=? free-identifier=?])
-  (-> (stx->list->c (listof identifier?))
-      (stx->list->c (listof (stx->list->c (list/c syntax? syntax?))))
-      type?
-      (-> identifier? identifier? boolean?)
-      type?)
+(define (inst-type/cs/orig Xs cs ty [var=? free-identifier=?])
   (define tys-solved (lookup-Xs/keep-unsolved Xs cs))
   (inst-type/orig tys-solved Xs ty var=?))
 ;; inst-type/cs/orig/variance
