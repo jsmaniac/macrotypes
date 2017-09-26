@@ -146,7 +146,6 @@
                                                      #'ty_a))
                                          ;; current cs
                                          cs))))
-(display'result:)(displayln (reverse as-))(displayln Xs)(displayln cs)
           (list (reverse as-) Xs (free-id-table-map cs list))])]))
 
   (define (mk-app-poly-infer-error stx expected-tys given-tys e_fn)
