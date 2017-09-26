@@ -15,7 +15,7 @@
          reverse length list-ref member)
 
 (define-type-constructor List
-  #:arity >= 0
+  #:arity = 1
   #:arg-variances (λ (stx) (make-list (sub1 (stx-length stx)) covariant)))
 
 (define-typed-syntax nil
