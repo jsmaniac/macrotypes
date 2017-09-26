@@ -85,6 +85,7 @@
         ;; a base type. We also know #'b is not a var, so #'b has
         ;; to be the same "identifier base type" as #'a.
         (unless (and (identifier? #'b) (free-identifier=? #'a #'b))
+          (displayln 1)
           (type-error #:src (get-orig #'b)
                       #:msg (format "couldn't unify ~~a and ~~a\n  expected: ~a\n  given: ~a"
                                     (string-join (map type->str (stx-map stx-car orig-cs)) ", ")
@@ -113,6 +114,7 @@
                                  #'((τ1 τ2) ... . rst)
                                  orig-cs)]
           [else
+           (displayln 2)
            (type-error #:src (get-orig #'b)
                        #:msg (format "couldn't unify ~~a and ~~a\n  expected: ~a\n  given: ~a"
                                      (string-join (map type->str (stx-map stx-car orig-cs)) ", ")
@@ -153,7 +155,7 @@
                                   [old-solution (make-immutable-free-id-table)])
   (define Xset (immutable-free-id-set (stx->list Xs)))
   (define X? (curry free-id-set-member? Xset))
-  (add-constraints/variance/var? X? X→variance ab+variance* old-solution orig-cs))
+  (add-constraints/variance/var? Xs X? X→variance ab+variance* old-solution orig-cs))
 
 ;; (-> Any Boolean : (∩ X Id))
 ;; (ImmutableFreeIdTable (∩ X Id) Variance)
@@ -162,14 +164,17 @@
 ;; (Stx-Listof (Stx-List Stx Stx))
 ;; ->
 ;; (ImmutableFreeIdTable (∩ X Id) Type)
-(define (add-constraints/variance/var? X? X→variance ab+variance* old-solution orig-cs)
+(define (add-constraints/variance/var? Xs X? X→variance ab+variance* old-solution orig-cs)
+  (newline)
+  (display 'ab+variance*)(displayln ab+variance*)
   (define-syntax-class X
     (pattern v:id
              #:when (X? #'v)
              #:attr variance (or (free-id-table-ref X→variance #'a #f)
                                  invariant)))
-  (define (do-error)
+  (define (do-error eee)
     (define/with-syntax [(a b _) . _] ab+variance*)
+    (displayln eee)
     (type-error #:src (get-orig #'b)
                 #:msg (format "couldn't unify ~~a and ~~a\n  expected: ~a\n  given: ~a"
                               (string-join (map type->str (stx-map stx-car orig-cs)) ", ")
@@ -180,7 +185,7 @@
                                    datum=?)
                 #'a))
   (define (continue new-ab* new-solution)
-    (add-constraints/variance/var? X? X→variance new-ab* new-solution orig-cs))
+    (add-constraints/variance/var? Xs X? X→variance new-ab* new-solution orig-cs))
   (syntax-parse ab+variance*
     [() old-solution]
     [((caller-τ callee-τ:X a/b-variance) . rest)
@@ -190,7 +195,7 @@
          (define v (variance-join (attribute callee-τ.variance)
                                   (syntax->datum #'a/b-variance)))
          (unless (typecheck?/variance v existing #'caller-τ)
-           (do-error))))
+           (do-error 33))))
      (continue #'rest
                (free-id-table-set old-solution #'callee-τ #'caller-τ))]
     [(((~Any caller-tycons caller-τᵢ ...)
@@ -208,13 +213,33 @@
      #:when (= (stx-length #'(caller-τᵢ ...)) (stx-length #'(varianceᵢ ...)))
      (continue #'((caller-τᵢ callee-τᵢ varianceᵢ) ... . rest)
                old-solution)]
+    [((caller callee a/b-variance) . rest)
+     #:when (displayln 'caller+callee+rest)
+     #:when (begin (display (X? #'caller))(displayln #'caller))
+     #:when (begin (display (free-identifier=? (stx-car Xs) #'callee))(displayln #'callee))
+     #:when (displayln Xs)
+     #:when (displayln #'rest)
+     #:when #f
+     #f]
+    [(({~and caller (~Any caller-tycons caller-τᵢ ...)}
+       {~and callee (~Any callee-tycons callee-τᵢ ...)}
+       a/b-variance)
+      . rest)
+     #:when (displayln #'caller)
+     #:when (displayln (get-arg-variances #'caller-tycons))
+     #:when (displayln #'callee)
+     #:when (displayln (get-arg-variances #'callee-tycons))
+     #:when (= (stx-length #'(caller-τᵢ ...)) (stx-length #'(callee-τᵢ ...)))
+     (continue #`((caller-τᵢ callee-τᵢ #,invariant) ... . rest)
+               old-solution)]
     [((caller-τ callee-τ a/b-variance) . rest)
+     ;; TODO: use this as a fallback if the "invariant" above fails?
      #:when (typecheck?/variance (syntax->datum #'a/b-variance)
                                  #'caller-τ
                                  #'callee-τ)
      (continue #'rest old-solution)]
     [(_ . rest)
-     (do-error)]))
+     (do-error 34)]))
 
 (define (datum=? x y)
   (equal? (syntax->datum x) (syntax->datum y)))
@@ -240,6 +265,7 @@
 (define (occurs-check entry orig-cs)
   (match-define (list a b) entry)
   (cond [(stx-contains-id? b a)
+         (displayln 4)
          (type-error #:src (get-orig b)
                      #:msg (format (string-append
                                     "couldn't unify ~~a and ~~a because one contains the other\n"
