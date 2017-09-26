@@ -125,7 +125,9 @@
     [(variance-covariant? variance) (typecheck? b a)]
     [(variance-contravariant? variance) (typecheck? b a)]
     ;; invariant and irrelevant
-    ;; TODO: use a parameter to indicate whether we're making a co/contravariant typecheck?, or whether it's an invariant typecheck? (to avoid an exponential cost by branching at each step)
+    ;; TODO: use a parameter to indicate whether we're making a co/contravariant
+    ;;       typecheck?, or whether it's an invariant typecheck? (to avoid an
+    ;;       exponential cost by branching at each step)
     [else (and (typecheck? a b)
                (typecheck? b a))]))
 
@@ -172,7 +174,11 @@
                 #:msg (format "couldn't unify ~~a and ~~a\n  expected: ~a\n  given: ~a"
                               (string-join (map type->str (stx-map stx-car orig-cs)) ", ")
                               (string-join (map type->str (stx-map stx-cadr orig-cs)) ", "))
-                #'a #'b))
+                (inst-type/cs/orig (free-id-table-keys old-solution)
+                                   (free-id-table-map old-solution list)
+                                   #'b
+                                   datum=?)
+                #'a))
   (define (continue new-ab* new-solution)
     (add-constraints/variance/var? X? X→variance new-ab* new-solution orig-cs))
   (syntax-parse ab+variance*
@@ -283,7 +289,12 @@
 ;; inst-type/cs/orig :
 ;; (Stx-Listof Id) Constraints Type-Stx (Id Id -> Bool) -> Type-Stx
 ;; like inst-type/cs, but also substitutes within the orig property
-(define (inst-type/cs/orig Xs cs ty [var=? free-identifier=?])
+(define/contract (inst-type/cs/orig Xs cs ty [var=? free-identifier=?])
+  (-> (stx->list->c (listof identifier?))
+      (stx->list->c (listof (stx->list->c (list/c syntax? syntax?))))
+      type?
+      (-> identifier? identifier? boolean?)
+      type?)
   (define tys-solved (lookup-Xs/keep-unsolved Xs cs))
   (inst-type/orig tys-solved Xs ty var=?))
 ;; inst-type/cs/orig/variance
