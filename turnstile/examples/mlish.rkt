@@ -146,10 +146,7 @@
                                                      #'ty_a))
                                          ;; current cs
                                          cs))))
-          (define solution-as-list (free-id-table-map cs list))
-          (list (reverse as-)
-                (map car solution-as-list)
-                solution-as-list)])]))
+          (list (reverse as-) Xs (free-id-table-map cs list))])]))
 
   (define (mk-app-poly-infer-error stx expected-tys given-tys e_fn)
     (format (string-append
